@@ -1,0 +1,43 @@
+name: Sync Fork
+
+on:
+  schedule:
+    - cron: '0 6 * * *'  # Daily at 06:00 UTC
+  workflow_dispatch:       # Allow manual trigger
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Sync upstream
+        run: |
+          git remote add upstream https://github.com/obra/superpowers.git
+          git fetch upstream main
+          
+          # Check if there are new commits
+          LOCAL=$(git rev-parse main)
+          REMOTE=$(git rev-parse upstream/main)
+          
+          if [ "$LOCAL" = "$REMOTE" ]; then
+            echo "Already up to date"
+            exit 0
+          fi
+          
+          echo "New commits found, merging..."
+          git merge upstream/main --no-edit
+          
+          # Re-apply .skillignore files (in case upstream doesn't have them)
+          echo "scripts/" > skills/brainstorming/.skillignore
+          echo "scripts/" > skills/subagent-driven-development/.skillignore
+          echo "*.sh" > skills/systematic-debugging/.skillignore
+          git add -A
+          git diff --cached --quiet || git commit -m "chore: re-apply .skillignore after upstream sync"
+          
+          git push origin main
+          echo "Synced successfully"
